@@ -131,7 +131,6 @@ BEGIN_EVENT_TABLE(lxFrame, wxFrame)
     EVT_MENU(LXMENU_FILE_RENDER_SETUP, lxFrame::OnAll)
     EVT_MENU(LXMENU_FILE_EXPORT, lxFrame::OnAll)
     EVT_MENU(LXMENU_FILE_IMPORT, lxFrame::OnAll)
-    EVT_MENU(LXMENU_EXPROT, lxFrame::OnAll)
     EVT_MENU(LXMENU_EXPFIT, lxFrame::OnAll)
     EVT_MENU_RANGE(LXMENU_HELP_CONTENTS, LXMENU_HELP_ABOUT, lxFrame::OnAll)
 		EVT_TOOL_RANGE(LXTB, LXTBEND, lxFrame::OnAll)
@@ -324,8 +323,6 @@ lxFrame::lxFrame(class lxApp * app, const wxString& title, const wxPoint& pos,
     this->m_toolMenu->AppendSeparator();
     this->m_toolMenu->AppendCheckItem(LXMENU_VIEW_VIEWPOINTSTP, _("Camera"));
     this->m_toolMenu->AppendCheckItem(LXMENU_VIEW_MODELSTP, _("Scene"));
-    this->m_toolMenu->AppendSeparator();
-    this->m_toolMenu->Append(LXMENU_EXPROT, _("Animation"));
     
     wxMenu *viewMenu = new wxMenu;
     viewMenu->Append(LXMENU_CAMERA_ADJUST, _("Action"), cameraAdjustMenu);
@@ -344,7 +341,6 @@ lxFrame::lxFrame(class lxApp * app, const wxString& title, const wxPoint& pos,
     winMenu->AppendCheckItem(LXMENU_VIEW_SELECTIONSTP, _("&Selection"));
     winMenu->AppendCheckItem(LXMENU_VIEW_SURVEYSTATS, _("&Survey statistics"));
     winMenu->AppendCheckItem(LXMENU_VIEW_PRESENTDLG, _("&Presentation"));
-    winMenu->Append(LXMENU_EXPROT, _("&Animation"));
     winMenu->AppendSeparator();
     winMenu->Append(LXMENU_TOOLS_OPTIONS, _("&Options..."));
 
@@ -569,10 +565,6 @@ void lxFrame::OnAll(wxCommandEvent& event)
 
     case LXMENU_HELP_CONTENTS:
       this->m_helpController->DisplayContents();
-      break;
-
-    case LXMENU_EXPROT:
-      this->ExportRotationPictures();
       break;
 
     case LXMENU_EXPFIT:
@@ -1090,10 +1082,7 @@ void lxFrame::TogglePresentationAnimation() {
     dynamic_cast<wxStaticText*>(this->m_viewpointSetupDlg->FindWindow(LXVSTP_RENSPEED))->SetLabel(_T(""));
   } else {
     this->canvas->m_sCameraAutoRotate = false;
-    if (!this->canvas->StartCameraPresentationAnimation()) {
-      wxMessageDialog dlg(this, _("Presentation animation needs at least two marked views."), _("Warning"), wxOK | wxICON_EXCLAMATION | wxCENTRE);
-      dlg.ShowModal();
-    }
+    this->canvas->StartCameraPresentationAnimation();
   }
   this->UpdateM2TB();
 }
@@ -1330,41 +1319,6 @@ void lxFrame::OpenFile(const wxString & fName)
       this->canvas->ForceRefresh();
 }
 
-
-void lxFrame::ExportRotationPictures() {
-  wxMessageDialog dlg(this, _("This is only EXPERIMENTAL function! Are you sure?"), _("Warning"), wxYES_NO | wxNO_DEFAULT | wxICON_EXCLAMATION | wxCENTRE);
-  if (dlg.ShowModal() != wxID_YES) return;
-  int i;
-  lxRenderData * tmpRD = new lxRenderData();
-  tmpRD->m_imgFileType = 1;
-  tmpRD->m_askFName = false;
-  this->canvas->setup->cam_orig_dir = this->canvas->setup->cam_dir;
-  this->canvas->setup->cam_orig_dist = this->canvas->setup->cam_dist;
-  this->canvas->setup->cam_orig_tilt = this->canvas->setup->cam_tilt;
-  this->canvas->setup->cam_orig_center = this->canvas->setup->cam_center;
-  this->canvas->setup->cam_orig_pos = this->canvas->setup->cam_pos;
-  for(i = 0; i < 600; i++) {
-  	if (!this->m_fileDir.IsEmpty()) {
-			tmpRD->m_imgFileName = this->m_fileDir;
-			tmpRD->m_imgFileName += _T("/");
-  	} else {
-  		tmpRD->m_imgFileName = _T("");
-  	}
-    tmpRD->m_imgFileName += wxString::Format(_T("ROT%04d.png"), i);
-    tmpRD->Render(this, this->canvas);
-	this->canvas->SwapBuffers();
-	if (i == 0) {
-		tmpRD->Render(this, this->canvas);
-		this->canvas->SwapBuffers();
-		tmpRD->Render(this, this->canvas);
-		this->canvas->SwapBuffers();
-	}
-	if (i < 599) {
-		this->canvas->setup->RotateCameraF(0.6);
-	}
-  }
-  delete tmpRD;
-}
 
 #ifdef LXMACOSX
 void lxApp::MacOpenFile(const wxString &fileName)

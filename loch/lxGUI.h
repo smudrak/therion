@@ -85,7 +85,6 @@ enum {
   LXMENU_HELP_BUGS,
   LXMENU_HELP_ABOUT,
   LXMENU_EXPFIT,
-  LXMENU_EXPROT,
   LXMENU_PRES,
   LXMENU_PRESMARK,
   LXMENU_PRESUPDATE,
@@ -231,7 +230,6 @@ class lxFrame: public wxFrame
     void ToggleVisibilityStLabelComment();
     void ToggleVisibilityStLabelAltitude();
     void ToggleVisibilityStLabelSurvey();
-    void ExportRotationPictures();
 
     void SetColorMode(int);
     void DetectFileType();

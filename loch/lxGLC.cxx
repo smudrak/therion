@@ -518,9 +518,6 @@ double lxGLCanvas::GetPresentationSceneDuration(wxXmlNode * n) {
 }
 
 bool lxGLCanvas::StartCameraPresentationAnimation() {
-  if (this->GetPresentationSceneCount() < 2)
-    return false;
-
   this->m_sCameraAutoRotate = false;
   this->m_sCameraPresentationAnimate = true;
   this->m_sCameraPresentationCounter = 0;
@@ -528,7 +525,10 @@ bool lxGLCanvas::StartCameraPresentationAnimation() {
   this->m_sCameraPresentationTo = 1;
   this->m_sCameraPresentationSWatch.Start();
   this->m_sCameraPresentationStartTime = 0;
-  this->setup->LoadFromXMLNode(this->GetPresentationScene(this->m_sCameraPresentationFrom));
+  if (this->GetPresentationSceneCount() == 1)
+    this->setup->LoadFromXMLNode(this->GetPresentationScene(0));
+  this->setup->StartCameraMovement();
+  this->m_sCameraPresentationStartDir = this->setup->cam_dir;
   this->ForceRefresh();
   return true;
 }
@@ -547,10 +547,8 @@ bool lxGLCanvas::CameraPresentationAnimate() {
     return false;
 
   count = this->GetPresentationSceneCount();
-  if (count < 2) {
-    this->StopCameraPresentationAnimation();
-    return false;
-  }
+  if (count < 2)
+    return this->CameraPresentationRotate();
 
   this->m_sCameraPresentationFrom %= count;
   this->m_sCameraPresentationTo %= count;
@@ -589,6 +587,37 @@ bool lxGLCanvas::CameraPresentationAnimate() {
     t = 1.0;
   t = t * t * (3.0 - 2.0 * t);
   this->setup->LoadFromXMLNode(from, to, t);
+
+  auto start = this->m_sCameraPresentationSWatch.Time();
+  this->ForceRefresh();
+  auto render_elapsed = this->m_sCameraPresentationSWatch.Time() - start;
+  if (render_elapsed < 10) wxMilliSleep(10 - render_elapsed);
+  this->m_sCameraPresentationCounter++;
+  return true;
+}
+
+bool lxGLCanvas::CameraPresentationRotate() {
+  long now, elapsed;
+  double t;
+
+  if (!this->m_sCameraPresentationAnimate)
+    return false;
+
+  now = this->m_sCameraPresentationSWatch.Time();
+  elapsed = now - this->m_sCameraPresentationStartTime;
+  while (elapsed >= 15000) {
+    this->m_sCameraPresentationStartTime += 15000;
+    elapsed -= 15000;
+    this->m_sCameraPresentationStartDir += 360.0;
+  }
+
+  if (elapsed < 0)
+    elapsed = 0;
+  t = double(elapsed) / 15000.0;
+  this->setup->cam_dir = this->m_sCameraPresentationStartDir + 360.0 * t;
+  while (this->setup->cam_dir >= 360.0)
+    this->setup->cam_dir -= 360.0;
+  this->setup->UpdatePos();
 
   auto start = this->m_sCameraPresentationSWatch.Time();
   this->ForceRefresh();
@@ -2101,7 +2130,6 @@ bool lxGLCanvas::TRCEndTile()
   else
     return false;
 }
-
 
 
 

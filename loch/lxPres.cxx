@@ -9,6 +9,8 @@
 #include <wx/progdlg.h>
 #include <wx/stattext.h>
 #include <wx/textctrl.h>
+#include <wx/ffile.h>
+#include <wx/utils.h>
 #include <cstdint>
 
 #include "lxPres.h"
@@ -26,6 +28,30 @@ enum {
   lxPR_LIST = 4000,
   lxPR_EXPORT,
 };
+
+static wxString lxQuoteShellArg(const wxString & value)
+{
+  wxString quoted = _T("'");
+  for (size_t i = 0; i < value.length(); i++) {
+    if (value[i] == _T('\''))
+      quoted += _T("'\\''");
+    else
+      quoted += value[i];
+  }
+  quoted += _T("'");
+  return quoted;
+}
+
+#ifdef LXWIN32
+static wxString lxQuoteBatArg(const wxString & value)
+{
+  wxString quoted = _T("\"");
+  quoted += value;
+  quoted.Replace(_T("%"), _T("%%"));
+  quoted += _T("\"");
+  return quoted;
+}
+#endif
 
 
 BEGIN_EVENT_TABLE(lxPresentDlg, wxMiniFrame)
@@ -277,14 +303,10 @@ void lxPresentDlg::ExportPresentation() {
   long count = this->m_posLBox->GetItemCount();
   long totalFrames = 1;
   long frame = 0;
-  wxString folderPath;
+  bool rotationFallback = count < 2;
+  bool exportMp4;
+  wxString folderPath, targetPath, scriptPath;
   wxXmlNode savedSetup(wxXML_ELEMENT_NODE, _T("Scene"));
-
-  if (count < 2) {
-    wxMessageDialog dlg(this, _("Presentation export needs at least two marked views."), _("Warning"), wxOK | wxICON_EXCLAMATION | wxCENTRE);
-    dlg.ShowModal();
-    return;
-  }
 
   if (this->m_fileDir.empty()) {
     this->m_fileDir = this->m_mainFrame->m_fileDir;
@@ -294,17 +316,20 @@ void lxPresentDlg::ExportPresentation() {
     this,
     _("Export presentation"),
     this->m_fileDir,
-    _T("presentation.png"),
-    _("PNG files (*.png)|*.png"),
+    _T("presentation.mp4"),
+    _("MP4 files (*.mp4)|*.mp4|PNG image sequence (*.png)|*.png"),
     wxFD_SAVE | wxFD_OVERWRITE_PROMPT);
+  dialog.SetFilterIndex(0);
   dialog.CentreOnParent();
   if (dialog.ShowModal() != wxID_OK)
     return;
 
   wxFileName outPath(dialog.GetPath());
+  exportMp4 = dialog.GetFilterIndex() == 0;
   if (outPath.GetExt().empty())
-    outPath.SetExt(_T("png"));
-  folderPath = outPath.GetFullPath();
+    outPath.SetExt(exportMp4 ? _T("mp4") : _T("png"));
+  targetPath = outPath.GetFullPath();
+  folderPath = exportMp4 ? targetPath + _T(".images") : targetPath;
 
   if (wxFileName::FileExists(folderPath)) {
     wxMessageDialog dlg(this, _("Unable to create output folder; a file with this name already exists."), _("Error"), wxOK | wxICON_ERROR | wxCENTRE);
@@ -318,16 +343,20 @@ void lxPresentDlg::ExportPresentation() {
     return;
   }
 
-  for (long i = 0; i < count; i++) {
-    wxXmlNode * to = this->GetScene((i + 1) % count);
-    double duration = 3.0;
-    int transitionFrames;
+  if (rotationFallback) {
+    totalFrames = 15 * 60;
+  } else {
+    for (long i = 0; i < count; i++) {
+      wxXmlNode * to = this->GetScene((i + 1) % count);
+      double duration = 3.0;
+      int transitionFrames;
 
-    this->GetSceneDuration(to).ToDouble(&duration);
-    transitionFrames = int(duration * 60.0 + 0.5);
-    if (transitionFrames < 1)
-      transitionFrames = 1;
-    totalFrames += transitionFrames;
+      this->GetSceneDuration(to).ToDouble(&duration);
+      transitionFrames = int(duration * 60.0 + 0.5);
+      if (transitionFrames < 1)
+        transitionFrames = 1;
+      totalFrames += transitionFrames;
+    }
   }
 
   wxProgressDialog progress(
@@ -355,10 +384,28 @@ void lxPresentDlg::ExportPresentation() {
     return progress.Update(frame);
   };
 
-  this->m_mainFrame->setup->LoadFromXMLNode(this->GetScene(0));
-  bool keepGoing = renderFrame();
+  if (count == 1)
+    this->m_mainFrame->setup->LoadFromXMLNode(this->GetScene(0));
+  bool keepGoing = true;
 
-  for (long i = 0; keepGoing && (i < count); i++) {
+  if (rotationFallback) {
+    double startDir = this->m_mainFrame->setup->cam_dir;
+    this->m_mainFrame->setup->StartCameraMovement();
+    for (int j = 1; keepGoing && (j <= 15 * 60); j++) {
+      this->m_mainFrame->setup->cam_dir = startDir + 360.0 * double(j) / double(15 * 60);
+      while (this->m_mainFrame->setup->cam_dir >= 360.0)
+        this->m_mainFrame->setup->cam_dir -= 360.0;
+      this->m_mainFrame->setup->UpdatePos();
+      keepGoing = renderFrame();
+    }
+  }
+
+  if (!rotationFallback) {
+    this->m_mainFrame->setup->LoadFromXMLNode(this->GetScene(0));
+    keepGoing = renderFrame();
+  }
+
+  for (long i = 0; keepGoing && !rotationFallback && (i < count); i++) {
     wxXmlNode * from = this->GetScene(i);
     wxXmlNode * to = this->GetScene((i + 1) % count);
     double duration = 3.0;
@@ -381,6 +428,46 @@ void lxPresentDlg::ExportPresentation() {
   this->m_mainFrame->canvas->ForceRefresh();
   this->m_mainFrame->UpdateM2TB();
   delete tmpRD;
+
+  if (exportMp4 && keepGoing) {
+#ifdef LXWIN32
+    scriptPath = targetPath + _T(".bat");
+    wxString framePattern = wxFileName(folderPath, _T("%06d.png")).GetFullPath();
+    wxString script =
+      _T("@echo off\r\n")
+      _T("ffmpeg -y -framerate 60 -i ") + lxQuoteBatArg(framePattern) +
+      _T(" -c:v libx264 -pix_fmt yuv420p ") + lxQuoteBatArg(targetPath) + _T("\r\n");
+    wxFFile file(scriptPath, _T("w"));
+    if (!file.IsOpened() || !file.Write(script)) {
+      wxMessageDialog dlg(this, _("Unable to create ffmpeg script."), _("Error"), wxOK | wxICON_ERROR | wxCENTRE);
+      dlg.ShowModal();
+      return;
+    }
+    file.Close();
+    if (wxExecute(_T("cmd.exe /C ") + lxQuoteBatArg(scriptPath), wxEXEC_SYNC) != 0) {
+      wxMessageDialog dlg(this, _("ffmpeg failed. The exported images and script were left in place."), _("Error"), wxOK | wxICON_ERROR | wxCENTRE);
+      dlg.ShowModal();
+    }
+#else
+    scriptPath = targetPath + _T(".sh");
+    wxString framePattern = wxFileName(folderPath, _T("%06d.png")).GetFullPath();
+    wxString script =
+      _T("#!/bin/sh\n")
+      _T("ffmpeg -y -framerate 60 -i ") + lxQuoteShellArg(framePattern) +
+      _T(" -c:v libx264 -pix_fmt yuv420p ") + lxQuoteShellArg(targetPath) + _T("\n");
+    wxFFile file(scriptPath, _T("w"));
+    if (!file.IsOpened() || !file.Write(script)) {
+      wxMessageDialog dlg(this, _("Unable to create ffmpeg script."), _("Error"), wxOK | wxICON_ERROR | wxCENTRE);
+      dlg.ShowModal();
+      return;
+    }
+    file.Close();
+    if (wxExecute(_T("/bin/sh ") + lxQuoteShellArg(scriptPath), wxEXEC_SYNC) != 0) {
+      wxMessageDialog dlg(this, _("ffmpeg failed. The exported images and script were left in place."), _("Error"), wxOK | wxICON_ERROR | wxCENTRE);
+      dlg.ShowModal();
+    }
+#endif
+  }
 }
 
 void lxPresentDlg::OnListItemSelected(wxListEvent& event)
