@@ -1,15 +1,21 @@
 #include <wx/statline.h>
 #include <wx/xml/xml.h>
 #include <wx/filedlg.h>
+#include <wx/filename.h>
 #include <wx/msgdlg.h>
-#include <wx/listbox.h>
+#include <wx/listctrl.h>
 #include <wx/button.h>
+#include <wx/dialog.h>
+#include <wx/progdlg.h>
+#include <wx/stattext.h>
+#include <wx/textctrl.h>
 #include <cstdint>
 
 #include "lxPres.h"
 #include "lxSetup.h"
 #include "lxGUI.h"
 #include "lxGLC.h"
+#include "lxRender.h"
 
 #ifndef LXGNUMSW
 #include "loch.xpm"
@@ -18,13 +24,14 @@
 
 enum {
   lxPR_LIST = 4000,
+  lxPR_EXPORT,
 };
 
 
 BEGIN_EVENT_TABLE(lxPresentDlg, wxMiniFrame)
   EVT_BUTTON(wxID_ANY, lxPresentDlg::OnCommand)
   EVT_BUTTON(wxID_CLOSE, lxPresentDlg::OnCommand)
-	EVT_LISTBOX(lxPR_LIST, lxPresentDlg::OnCommand)
+	EVT_LIST_ITEM_SELECTED(lxPR_LIST, lxPresentDlg::OnListItemSelected)
   EVT_MOVE(lxPresentDlg::OnMove)
   EVT_CLOSE(lxPresentDlg::OnClose)
 END_EVENT_TABLE()
@@ -120,18 +127,19 @@ void lxPresentDlg::ResetPresentation(bool save) {
   r = new wxXmlNode(wxXML_ELEMENT_NODE, _T("LochPresentation"));
   this->m_mainFrame->m_pres->SetRoot(r);
   this->m_changed = false;
-  this->m_posLBox->Clear();
+  this->m_posLBox->DeleteAllItems();
 }
 
 void lxPresentDlg::UpdateList() {
-  this->m_posLBox->Clear();
+  this->m_posLBox->DeleteAllItems();
   wxXmlNode * n;
   if (this->m_mainFrame->m_pres->GetRoot() != NULL) {
     n = this->m_mainFrame->m_pres->GetRoot()->GetChildren();
     long time = 0;
     while (n != NULL) {
       if (n->GetName() == _T("Scene")) {
-        this->m_posLBox->AppendString(wxString::Format(_T("%04ld"), time));
+        long item = this->m_posLBox->InsertItem(time, this->GetSceneLabel(n, time));
+        this->m_posLBox->SetItem(item, 1, this->GetSceneDuration(n));
         time++;
       }
       n = n->GetNext();
@@ -139,14 +147,252 @@ void lxPresentDlg::UpdateList() {
   }
 }
 
+long lxPresentDlg::GetSelection() {
+  return this->m_posLBox->GetNextItem(-1, wxLIST_NEXT_ALL, wxLIST_STATE_SELECTED);
+}
+
+void lxPresentDlg::SelectScene(long index) {
+  if ((index < 0) || (index >= this->m_posLBox->GetItemCount()))
+    return;
+
+  this->m_posLBox->SetItemState(index, wxLIST_STATE_SELECTED | wxLIST_STATE_FOCUSED, wxLIST_STATE_SELECTED | wxLIST_STATE_FOCUSED);
+  this->m_posLBox->EnsureVisible(index);
+}
+
+wxXmlNode * lxPresentDlg::GetScene(long index) {
+  wxXmlNode * r = this->m_mainFrame->m_pres->GetRoot();
+  wxXmlNode * n;
+  long c = 0;
+
+  if (r == NULL)
+    return NULL;
+
+  n = r->GetChildren();
+  while (n != NULL) {
+    if (n->GetName() == _T("Scene")) {
+      if (index == c)
+        return n;
+      c++;
+    }
+    n = n->GetNext();
+  }
+
+  return NULL;
+}
+
+wxString lxPresentDlg::GetSceneLabel(wxXmlNode * n, long index) {
+  wxString name;
+
+  if (n != NULL)
+    name = n->GetAttribute(_T("name"), wxEmptyString);
+
+  if (name.empty())
+    name = wxString::Format(_T("%04ld"), index);
+
+  return name;
+}
+
+wxString lxPresentDlg::GetSceneDuration(wxXmlNode * n) {
+  wxString duration;
+  double seconds;
+
+  if (n != NULL)
+    duration = n->GetAttribute(_T("duration"), wxEmptyString);
+
+  if (duration.empty() || !duration.ToDouble(&seconds) || (seconds <= 0.0))
+    duration = _T("3");
+
+  return duration;
+}
+
+void lxPresentDlg::EditSelected() {
+  long sel = this->GetSelection();
+  wxXmlNode * n;
+  wxString name, duration;
+  double seconds;
+
+  if (sel < 0)
+    return;
+
+  n = this->GetScene(sel);
+  if (n == NULL)
+    return;
+
+  wxDialog dlg(this, wxID_ANY, _("Edit view"), wxDefaultPosition, wxDefaultSize, wxDEFAULT_DIALOG_STYLE | wxRESIZE_BORDER);
+  wxBoxSizer * dialogSizer = new wxBoxSizer(wxVERTICAL);
+  wxFlexGridSizer * fieldSizer = new wxFlexGridSizer(2, 2, lxBORDER, lxBORDER);
+  wxTextCtrl * nameTextCtrl = new wxTextCtrl(&dlg, wxID_ANY, this->GetSceneLabel(n, sel));
+  wxTextCtrl * durationTextCtrl = new wxTextCtrl(&dlg, wxID_ANY, this->GetSceneDuration(n));
+
+  fieldSizer->Add(new wxStaticText(&dlg, wxID_ANY, _("Name")), 0, wxALIGN_CENTER_VERTICAL);
+  fieldSizer->Add(nameTextCtrl, 1, wxEXPAND);
+  fieldSizer->Add(new wxStaticText(&dlg, wxID_ANY, _("Duration (s)")), 0, wxALIGN_CENTER_VERTICAL);
+  fieldSizer->Add(durationTextCtrl, 1, wxEXPAND);
+  fieldSizer->AddGrowableCol(1);
+
+  dialogSizer->Add(fieldSizer, 1, wxALL | wxEXPAND, lxBORDER);
+  dialogSizer->Add(dlg.CreateSeparatedButtonSizer(wxOK | wxCANCEL), 0, wxALL | wxEXPAND, lxBORDER);
+  dlg.SetSizer(dialogSizer);
+  dialogSizer->SetSizeHints(&dlg);
+
+  while (dlg.ShowModal() == wxID_OK) {
+    name = nameTextCtrl->GetValue();
+    duration = durationTextCtrl->GetValue();
+    if (duration.ToDouble(&seconds) && (seconds > 0.0))
+      break;
+
+    wxMessageDialog msg(&dlg, _("Duration must be a positive number of seconds."), _("Warning"), wxOK | wxICON_EXCLAMATION | wxCENTRE);
+    msg.ShowModal();
+  }
+
+  if (!duration.ToDouble(&seconds) || (seconds <= 0.0))
+    return;
+
+  n->DeleteAttribute(_T("name"));
+  if (!name.empty())
+    n->AddAttribute(_T("name"), name);
+
+  n->DeleteAttribute(_T("duration"));
+  n->AddAttribute(_T("duration"), duration);
+
+  this->UpdateList();
+  this->SelectScene(sel);
+  this->m_changed = true;
+}
+
 
 void lxPresentDlg::UpdateControls() {
-  int sel = this->m_posLBox->GetSelection();
-  size_t count = this->m_posLBox->GetCount();
-  wxWindow::FindWindowById(LXMENU_PRESUPDATE, this)->Enable(count > 0);
-  wxWindow::FindWindowById(LXMENU_PRESDELETE, this)->Enable(count > 0);
-  wxWindow::FindWindowById(LXMENU_PRESMOVEDOWN, this)->Enable((count > 0) && (sel != wxNOT_FOUND) && ((size_t(sel) + 1) < count));
-  wxWindow::FindWindowById(LXMENU_PRESMOVEUP, this)->Enable((count > 0) && (sel != wxNOT_FOUND) && (sel > 0));
+  long sel = this->GetSelection();
+  long count = this->m_posLBox->GetItemCount();
+  wxXmlNode * n = this->GetScene(sel);
+
+  wxWindow::FindWindowById(LXMENU_PRESUPDATE, this)->Enable(n != NULL);
+  wxWindow::FindWindowById(LXMENU_PRESDELETE, this)->Enable(n != NULL);
+  wxWindow::FindWindowById(LXMENU_PRESMOVEDOWN, this)->Enable((n != NULL) && ((sel + 1) < count));
+  wxWindow::FindWindowById(LXMENU_PRESMOVEUP, this)->Enable((n != NULL) && (sel > 0));
+  wxWindow::FindWindowById(LXMENU_PRESEDIT, this)->Enable(n != NULL);
+}
+
+void lxPresentDlg::ExportPresentation() {
+  long count = this->m_posLBox->GetItemCount();
+  long totalFrames = 1;
+  long frame = 0;
+  wxString folderPath;
+  wxXmlNode savedSetup(wxXML_ELEMENT_NODE, _T("Scene"));
+
+  if (count < 2) {
+    wxMessageDialog dlg(this, _("Presentation export needs at least two marked views."), _("Warning"), wxOK | wxICON_EXCLAMATION | wxCENTRE);
+    dlg.ShowModal();
+    return;
+  }
+
+  if (this->m_fileDir.empty()) {
+    this->m_fileDir = this->m_mainFrame->m_fileDir;
+  }
+
+  wxFileDialog dialog(
+    this,
+    _("Export presentation"),
+    this->m_fileDir,
+    _T("presentation.png"),
+    _("PNG files (*.png)|*.png"),
+    wxFD_SAVE | wxFD_OVERWRITE_PROMPT);
+  dialog.CentreOnParent();
+  if (dialog.ShowModal() != wxID_OK)
+    return;
+
+  wxFileName outPath(dialog.GetPath());
+  if (outPath.GetExt().empty())
+    outPath.SetExt(_T("png"));
+  folderPath = outPath.GetFullPath();
+
+  if (wxFileName::FileExists(folderPath)) {
+    wxMessageDialog dlg(this, _("Unable to create output folder; a file with this name already exists."), _("Error"), wxOK | wxICON_ERROR | wxCENTRE);
+    dlg.ShowModal();
+    return;
+  }
+
+  if (!wxFileName::DirExists(folderPath) && !wxFileName::Mkdir(folderPath, wxS_DIR_DEFAULT, wxPATH_MKDIR_FULL)) {
+    wxMessageDialog dlg(this, _("Unable to create output folder."), _("Error"), wxOK | wxICON_ERROR | wxCENTRE);
+    dlg.ShowModal();
+    return;
+  }
+
+  for (long i = 0; i < count; i++) {
+    wxXmlNode * to = this->GetScene((i + 1) % count);
+    double duration = 3.0;
+    int transitionFrames;
+
+    this->GetSceneDuration(to).ToDouble(&duration);
+    transitionFrames = int(duration * 60.0 + 0.5);
+    if (transitionFrames < 1)
+      transitionFrames = 1;
+    totalFrames += transitionFrames;
+  }
+
+  wxProgressDialog progress(
+    _("Export presentation"),
+    _("Rendering presentation frames..."),
+    totalFrames,
+    this,
+    wxPD_CAN_ABORT | wxPD_APP_MODAL | wxPD_AUTO_HIDE | wxPD_ELAPSED_TIME | wxPD_ESTIMATED_TIME | wxPD_REMAINING_TIME);
+
+  lxRenderData * tmpRD = new lxRenderData();
+  tmpRD->m_imgFileType = 1;
+  tmpRD->m_askFName = false;
+  tmpRD->m_scaleMode = LXRENDER_FIT_SCREEN;
+
+  this->m_mainFrame->canvas->m_sCameraAutoRotate = false;
+  this->m_mainFrame->canvas->StopCameraPresentationAnimation();
+  this->m_mainFrame->setup->SaveToXMLNode(&savedSetup);
+
+  auto renderFrame = [&]() -> bool {
+    wxFileName framePath(folderPath, wxString::Format(_T("%06ld.png"), frame));
+    tmpRD->m_imgFileName = framePath.GetFullPath();
+    tmpRD->Render(this, this->m_mainFrame->canvas);
+    this->m_mainFrame->canvas->SwapBuffers();
+    frame++;
+    return progress.Update(frame);
+  };
+
+  this->m_mainFrame->setup->LoadFromXMLNode(this->GetScene(0));
+  bool keepGoing = renderFrame();
+
+  for (long i = 0; keepGoing && (i < count); i++) {
+    wxXmlNode * from = this->GetScene(i);
+    wxXmlNode * to = this->GetScene((i + 1) % count);
+    double duration = 3.0;
+    int transitionFrames;
+
+    this->GetSceneDuration(to).ToDouble(&duration);
+    transitionFrames = int(duration * 60.0 + 0.5);
+    if (transitionFrames < 1)
+      transitionFrames = 1;
+
+    for (int j = 1; keepGoing && (j <= transitionFrames); j++) {
+      double t = double(j) / double(transitionFrames);
+      t = t * t * (3.0 - 2.0 * t);
+      this->m_mainFrame->setup->LoadFromXMLNode(from, to, t);
+      keepGoing = renderFrame();
+    }
+  }
+
+  this->m_mainFrame->setup->LoadFromXMLNode(&savedSetup);
+  this->m_mainFrame->canvas->ForceRefresh();
+  this->m_mainFrame->UpdateM2TB();
+  delete tmpRD;
+}
+
+void lxPresentDlg::OnListItemSelected(wxListEvent& event)
+{
+  wxXmlNode * n = this->GetScene(event.GetIndex());
+
+  if (n != NULL) {
+    this->m_mainFrame->setup->LoadFromXMLNode(n);
+    this->m_mainFrame->canvas->ForceRefresh();
+    this->m_mainFrame->UpdateM2TB();
+  }
+  this->UpdateControls();
 }
 
 
@@ -171,10 +417,11 @@ void lxPresentDlg::OnCommand(wxCommandEvent& event)
     case LXMENU_PRESMARK:
       p = new wxXmlNode(wxXML_ELEMENT_NODE, _T("Scene"));
       this->m_mainFrame->setup->SaveToXMLNode(p);
-      sel = this->m_posLBox->GetSelection();
-      if (sel == wxNOT_FOUND) {
+      p->AddAttribute(_T("duration"), _T("3"));
+      sel = this->GetSelection();
+      if (sel < 0) {
         r->AddChild(p);
-        sel = this->m_posLBox->GetCount();
+        sel = this->m_posLBox->GetItemCount();
       } else {
         n = r->GetChildren();
         c = 0;
@@ -191,9 +438,8 @@ void lxPresentDlg::OnCommand(wxCommandEvent& event)
         }
       }
       this->UpdateList();
-      this->m_posLBox->Select(sel);
+      this->SelectScene(sel);
       this->UpdateControls();
-      //this->m_posLBox->EnsureVisible(this->m_posLBox->GetCount()-1);
       this->m_changed = true;
       break; 
 
@@ -201,50 +447,44 @@ void lxPresentDlg::OnCommand(wxCommandEvent& event)
     case LXMENU_PRESMOVEUP:
     case LXMENU_PRESDELETE:
     case LXMENU_PRESUPDATE:
-    case lxPR_LIST:
+    case LXMENU_PRESEDIT:
       n = r->GetChildren();
       p = NULL;
       c = 0;
-      if (event.GetId() == lxPR_LIST)
-        sel = event.GetSelection();
-      else {
-        sel = this->m_posLBox->GetSelection();
-        if (sel == wxNOT_FOUND) break;
-      }
+      sel = this->GetSelection();
+      if (sel < 0) break;
       while (n != NULL) {
         if (n->GetName() == _T("Scene")) {
           if (sel == c) {
             switch (event.GetId()) {
-              case lxPR_LIST:
-                this->m_mainFrame->setup->LoadFromXMLNode(n);
-                this->m_mainFrame->canvas->ForceRefresh();
-                this->m_mainFrame->UpdateM2TB();
-                break;
               case LXMENU_PRESUPDATE:
                 this->m_mainFrame->setup->SaveToXMLNode(n);
+                break;
+              case LXMENU_PRESEDIT:
+                this->EditSelected();
                 break;
               case LXMENU_PRESDELETE:
                 r->RemoveChild(n);
                 delete n;
                 this->UpdateList();
-                if (this->m_posLBox->GetCount() > 0)
-                  this->m_posLBox->Select(static_cast<intmax_t>(this->m_posLBox->GetCount()) > c ? c : c-1);
+                if (this->m_posLBox->GetItemCount() > 0)
+                  this->SelectScene(this->m_posLBox->GetItemCount() > c ? c : c-1);
                 break;
               case LXMENU_PRESMOVEUP:
                 if (c > 0) {
                   r->RemoveChild(n);
                   r->InsertChild(n, p);
                   this->UpdateList();
-                  this->m_posLBox->Select(c-1);
+                  this->SelectScene(c-1);
                 }
                 break;
               case LXMENU_PRESMOVEDOWN:
-                if ((c+1) < static_cast<intmax_t>(this->m_posLBox->GetCount())) {
+                if ((c+1) < this->m_posLBox->GetItemCount()) {
                   p = n->GetNext();
                   r->RemoveChild(n);
                   r->InsertChildAfter(n, p);
                   this->UpdateList();
-                  this->m_posLBox->Select(c+1);
+                  this->SelectScene(c+1);
                 }
                 break;
             }
@@ -271,7 +511,11 @@ void lxPresentDlg::OnCommand(wxCommandEvent& event)
 
     case LXMENU_PRESOPEN:
       this->LoadPresentation();
-      this->m_posLBox->Select(0);
+      this->SelectScene(0);
+      break;
+
+    case lxPR_EXPORT:
+      this->ExportPresentation();
       break;
 
   }
@@ -310,12 +554,19 @@ lxPresentDlg::lxPresentDlg(wxWindow *parent)
   wxBoxSizer * sizerTop = new wxBoxSizer(wxHORIZONTAL);
 
   lxPanel = new wxPanel(this, wxID_ANY);
-  this->m_posLBox = new wxListBox(lxPanel, lxPR_LIST);
+  this->m_posLBox = new wxListCtrl(lxPanel, lxPR_LIST, wxDefaultPosition, wxDefaultSize, wxLC_REPORT | wxLC_SINGLE_SEL);
+  this->m_posLBox->InsertColumn(0, _("View"));
+  this->m_posLBox->InsertColumn(1, _("Duration (s)"));
+  this->m_posLBox->SetColumnWidth(0, 120);
+  this->m_posLBox->SetColumnWidth(1, 80);
 
   wxBoxSizer * controlSizer = new wxBoxSizer(wxVERTICAL);
   controlSizer->Add(
 		new wxButton(lxPanel, LXMENU_PRESMARK, _("Mark")), 
 		0, wxALIGN_RIGHT | wxALL);
+  controlSizer->Add(
+    new wxButton(lxPanel, LXMENU_PRESEDIT, _("Edit...")),
+    0, wxALIGN_RIGHT | lxNOTTOP);
   controlSizer->Add(
 		new wxButton(lxPanel, LXMENU_PRESUPDATE, _("Update")), 
 		0, wxALIGN_RIGHT | lxNOTTOP);
@@ -343,6 +594,9 @@ lxPresentDlg::lxPresentDlg(wxWindow *parent)
   controlSizer->Add(
 		new wxButton(lxPanel, LXMENU_PRESSAVEAS, _("Save as...")), 
 		0, wxALIGN_RIGHT | lxNOTTOP);
+  controlSizer->Add(
+    new wxButton(lxPanel, lxPR_EXPORT, _("Export...")),
+    0, wxALIGN_RIGHT | lxNOTTOP);
 
 
   sizerTop->Add(m_posLBox, 1, wxTOP | wxBOTTOM | wxLEFT | wxEXPAND, lxBORDER);
@@ -369,7 +623,3 @@ lxPresentDlg::lxPresentDlg(wxWindow *parent)
   this->UpdateControls();
 
 }
-
-
-
-

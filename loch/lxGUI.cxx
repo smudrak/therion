@@ -20,8 +20,11 @@
 #include <wx/fs_zip.h>
 #include <wx/dnd.h>
 #include <wx/display.h>
+#include <wx/dialog.h>
 #include <wx/menu.h>
 #include <wx/msgdlg.h>
+#include <wx/stattext.h>
+#include <wx/textctrl.h>
 
 #include <vtkObject.h>
 
@@ -43,6 +46,7 @@
 #include "icons/stereo.xpm"
 #include "icons/rotation.xpm"
 #include "icons/lockrot.xpm"
+#include "icons/play.xpm"
 #include "icons/fit.xpm"
 #include "icons/home.xpm"
 #include "icons/rendersetup.xpm"
@@ -109,6 +113,7 @@ BEGIN_EVENT_TABLE(lxFrame, wxFrame)
     EVT_MENU(LXMENU_CAMERA_ZOOMOUT, lxFrame::OnMenuCameraMove)
     EVT_MENU(LXMENU_CAMERA_PERSP, lxFrame::OnAll)
     EVT_MENU(LXMENU_CAMERA_AUTOROTATE, lxFrame::OnAll)
+    EVT_MENU(LXMENU_CAMERA_PRESENTATION, lxFrame::OnAll)
     EVT_MENU(LXMENU_CAMERA_LOCKROT, lxFrame::OnAll)
     EVT_MENU(LXMENU_CAMERA_ORIENT_HOME, lxFrame::OnMenuCameraOrient)
     EVT_MENU(LXMENU_CAMERA_ORIENT_PLAN, lxFrame::OnMenuCameraOrient)
@@ -242,6 +247,7 @@ lxFrame::lxFrame(class lxApp * app, const wxString& title, const wxPoint& pos,
 		this->m_toolBar->AddSeparator();		
     this->m_toolBar->AddTool(LXTB_ROTATION, _("Rotation"), wxBitmap(rotation_xpm), _("Rotation"), wxITEM_CHECK);
 		this->m_toolBar->AddTool(LXTB_LOCKROT, _("Lock rotation"), wxBitmap(lockrot_xpm), _("Lock rotation"), wxITEM_CHECK);
+    this->m_toolBar->AddTool(LXTB_PRESENTATION, _("Presentation"), wxBitmap(play_xpm), _("Presentation animation"), wxITEM_CHECK);
 		this->m_toolBar->AddTool(LXTB_PERSP, _("Ortho"), wxBitmap(orto_xpm), _("Orthogonal view"), wxITEM_CHECK);
 		this->m_toolBar->AddTool(LXTB_STEREO, _("Stereo"), wxBitmap(stereo_xpm), _("Stereo mode"), wxITEM_CHECK);
 		this->m_toolBar->AddSeparator();		
@@ -314,6 +320,7 @@ lxFrame::lxFrame(class lxApp * app, const wxString& title, const wxPoint& pos,
     this->m_toolMenu = new wxMenu;
     this->m_toolMenu->AppendCheckItem(LXMENU_CAMERA_AUTOROTATE, _("Rotation"));
     this->m_toolMenu->AppendCheckItem(LXMENU_CAMERA_LOCKROT, _("Lock rotation"));
+    this->m_toolMenu->AppendCheckItem(LXMENU_CAMERA_PRESENTATION, _("Presentation animation"));
     this->m_toolMenu->AppendSeparator();
     this->m_toolMenu->AppendCheckItem(LXMENU_VIEW_VIEWPOINTSTP, _("Camera"));
     this->m_toolMenu->AppendCheckItem(LXMENU_VIEW_MODELSTP, _("Scene"));
@@ -324,6 +331,7 @@ lxFrame::lxFrame(class lxApp * app, const wxString& title, const wxPoint& pos,
     viewMenu->Append(LXMENU_CAMERA_ADJUST, _("Action"), cameraAdjustMenu);
     viewMenu->AppendCheckItem(LXMENU_CAMERA_AUTOROTATE, _("Rotation"));
     viewMenu->AppendCheckItem(LXMENU_CAMERA_LOCKROT, _("Lock rotation"));
+    viewMenu->AppendCheckItem(LXMENU_CAMERA_PRESENTATION, _("Presentation animation"));
     viewMenu->Append(LXMENU_CAMERA_ORIENT, _("Orientation"), cameraOrientMenu);
     viewMenu->AppendCheckItem(LXMENU_CAMERA_PERSP, _("Orthogonal"));
     viewMenu->AppendSeparator();
@@ -568,8 +576,7 @@ void lxFrame::OnAll(wxCommandEvent& event)
       break;
 
     case LXMENU_EXPFIT:
-      this->canvas->SetSize(720,576);
-      this->Fit();
+      this->ResizeCanvas();
       break;
 
     case LXMENU_HELP_CONTROL:
@@ -603,6 +610,11 @@ void lxFrame::OnAll(wxCommandEvent& event)
 		case LXMENU_CAMERA_LOCKROT:
 			this->ToggleRotLock();
 			break;
+
+    case LXTB_PRESENTATION:
+    case LXMENU_CAMERA_PRESENTATION:
+      this->TogglePresentationAnimation();
+      break;
 
 		case LXTB_FULLSCREEN:
     case LXMENU_VIEW_FULLSCREEN:
@@ -901,6 +913,11 @@ void lxFrame::UpdateM2TB() {
   this->m_toolMenu->Check(LXMENU_CAMERA_AUTOROTATE, this->canvas->m_sCameraAutoRotate);
 	this->m_toolBar->ToggleTool(LXTB_ROTATION, this->canvas->m_sCameraAutoRotate); 
 
+  // presentation animation
+  this->m_menuBar->Check(LXMENU_CAMERA_PRESENTATION, this->canvas->m_sCameraPresentationAnimate);
+  this->m_toolMenu->Check(LXMENU_CAMERA_PRESENTATION, this->canvas->m_sCameraPresentationAnimate);
+  this->m_toolBar->ToggleTool(LXTB_PRESENTATION, this->canvas->m_sCameraPresentationAnimate);
+
 	// lock rotation
 	this->m_menuBar->Check(LXMENU_CAMERA_LOCKROT, this->canvas->m_sCameraLockRotation);
   this->m_toolMenu->Check(LXMENU_CAMERA_LOCKROT, this->canvas->m_sCameraLockRotation);
@@ -932,6 +949,47 @@ void lxFrame::TogglePerspective() {
   this->setup->cam_persp = !this->setup->cam_persp;
   this->canvas->ForceRefresh();
 	this->UpdateM2TB();
+}
+
+void lxFrame::ResizeCanvas() {
+  wxDialog dlg(this, wxID_ANY, _("Size"), wxDefaultPosition, wxDefaultSize, wxDEFAULT_DIALOG_STYLE | wxRESIZE_BORDER);
+  wxBoxSizer * dialogSizer = new wxBoxSizer(wxVERTICAL);
+  wxFlexGridSizer * fieldSizer = new wxFlexGridSizer(2, 2, lxBORDER, lxBORDER);
+  wxSize currentCanvasSize = this->canvas->GetClientSize();
+  wxTextCtrl * widthTextCtrl = new wxTextCtrl(&dlg, wxID_ANY, wxString::Format(_T("%d"), currentCanvasSize.GetWidth() > 0 ? currentCanvasSize.GetWidth() : 1920));
+  wxTextCtrl * heightTextCtrl = new wxTextCtrl(&dlg, wxID_ANY, wxString::Format(_T("%d"), currentCanvasSize.GetHeight() > 0 ? currentCanvasSize.GetHeight() : 1080));
+  long width, height;
+
+  fieldSizer->Add(new wxStaticText(&dlg, wxID_ANY, _("Width")), 0, wxALIGN_CENTER_VERTICAL);
+  fieldSizer->Add(widthTextCtrl, 1, wxEXPAND);
+  fieldSizer->Add(new wxStaticText(&dlg, wxID_ANY, _("Height")), 0, wxALIGN_CENTER_VERTICAL);
+  fieldSizer->Add(heightTextCtrl, 1, wxEXPAND);
+  fieldSizer->AddGrowableCol(1);
+
+  dialogSizer->Add(fieldSizer, 1, wxALL | wxEXPAND, lxBORDER);
+  dialogSizer->Add(dlg.CreateSeparatedButtonSizer(wxOK | wxCANCEL), 0, wxALL | wxEXPAND, lxBORDER);
+  dlg.SetSizer(dialogSizer);
+  dialogSizer->SetSizeHints(&dlg);
+
+  while (dlg.ShowModal() == wxID_OK) {
+    if (widthTextCtrl->GetValue().ToLong(&width) && heightTextCtrl->GetValue().ToLong(&height) && (width > 0) && (height > 0))
+      break;
+
+    wxMessageDialog msg(&dlg, _("Width and height must be positive numbers."), _("Warning"), wxOK | wxICON_EXCLAMATION | wxCENTRE);
+    msg.ShowModal();
+  }
+
+  if (!widthTextCtrl->GetValue().ToLong(&width) || !heightTextCtrl->GetValue().ToLong(&height) || (width <= 0) || (height <= 0))
+    return;
+
+  if (this->IsMaximized())
+    this->Maximize(false);
+
+  wxSize frameSize = this->GetSize();
+  wxSize canvasSize = this->canvas->GetClientSize();
+  this->SetSize(frameSize.GetWidth() + int(width) - canvasSize.GetWidth(), frameSize.GetHeight() + int(height) - canvasSize.GetHeight());
+  this->Layout();
+  this->canvas->ForceRefresh();
 }
 
 #define  lxFrameToggle(proc,item) void lxFrame::Toggle##proc() { \
@@ -1016,6 +1074,7 @@ void lxFrame::ToggleStereoBW() {
 void lxFrame::ToggleRotation() {
 	this->canvas->m_sCameraAutoRotate = !this->canvas->m_sCameraAutoRotate;
   if (this->canvas->m_sCameraAutoRotate) {
+    this->canvas->StopCameraPresentationAnimation();
     this->canvas->m_sCameraAutoRotateCounter = 0;
     this->canvas->m_sCameraAutoRotateSWatch.Start();
     this->setup->StartCameraMovement();
@@ -1023,6 +1082,20 @@ void lxFrame::ToggleRotation() {
     dynamic_cast<wxStaticText*>(this->m_viewpointSetupDlg->FindWindow(LXVSTP_RENSPEED))->SetLabel(_T(""));
   }
 	this->UpdateM2TB();
+}
+
+void lxFrame::TogglePresentationAnimation() {
+  if (this->canvas->m_sCameraPresentationAnimate) {
+    this->canvas->StopCameraPresentationAnimation();
+    dynamic_cast<wxStaticText*>(this->m_viewpointSetupDlg->FindWindow(LXVSTP_RENSPEED))->SetLabel(_T(""));
+  } else {
+    this->canvas->m_sCameraAutoRotate = false;
+    if (!this->canvas->StartCameraPresentationAnimation()) {
+      wxMessageDialog dlg(this, _("Presentation animation needs at least two marked views."), _("Warning"), wxOK | wxICON_EXCLAMATION | wxCENTRE);
+      dlg.ShowModal();
+    }
+  }
+  this->UpdateM2TB();
 }
 
 void lxFrame::ToggleRotLock() {
@@ -1299,7 +1372,3 @@ void lxApp::MacOpenFile(const wxString &fileName)
     this->frame->OpenFile(fileName);
 }
 #endif    
-
-
-
-

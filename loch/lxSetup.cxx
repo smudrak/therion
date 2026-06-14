@@ -363,6 +363,22 @@ void interpolateFloat(double * value, wxString v1, wxString v2, double t)
   else *value = (1.0 - t) * atof(v1.mbc_str()) + t * atof(v2.mbc_str());
 }
 
+void interpolateAngle(double * value, wxString v1, wxString v2, double t)
+{
+  if (v1.empty()) return;
+  if (v2.empty()) {
+    *value = atof(v1.mbc_str());
+  } else {
+    double a1 = atof(v1.mbc_str());
+    double da = atof(v2.mbc_str()) - a1;
+    while (da > 180.0) da -= 360.0;
+    while (da < -180.0) da += 360.0;
+    *value = a1 + da * t;
+  }
+  while (*value < 0.0) *value += 360.0;
+  while (*value >= 360.0) *value -= 360.0;
+}
+
 void interpolateBoolean(bool * value, wxString v1, wxString v2, double t)
 {
   if (v1.empty()) return;
@@ -380,7 +396,7 @@ void lxSetup::LoadFromXMLNode(wxXmlNode * n, wxXmlNode * nn, double t)
   char * prevlocale = setlocale(LC_NUMERIC,NULL);
   double d;
   setlocale(LC_NUMERIC,"C");
-  interpolateFloat(&(this->cam_dir), getXmlValue(n, _T("CameraFacing")), getXmlValue(nn, _T("CameraFacing")), t);
+  interpolateAngle(&(this->cam_dir), getXmlValue(n, _T("CameraFacing")), getXmlValue(nn, _T("CameraFacing")), t);
   interpolateFloat(&(this->cam_tilt), getXmlValue(n, _T("CameraTilt")), getXmlValue(nn, _T("CameraTilt")), t);
   interpolateFloat(&(this->cam_center.x), getXmlValue(n, _T("CameraCenterX")), getXmlValue(nn, _T("CameraCenterX")), t);
   interpolateFloat(&(this->cam_center.y), getXmlValue(n, _T("CameraCenterY")), getXmlValue(nn, _T("CameraCenterY")), t);

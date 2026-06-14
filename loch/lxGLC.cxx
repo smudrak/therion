@@ -465,6 +465,139 @@ bool lxGLCanvas::CameraAutoRotate() {
     return false;
 }
 
+long lxGLCanvas::GetPresentationSceneCount() {
+  wxXmlNode * r = this->frame->m_pres->GetRoot();
+  wxXmlNode * n;
+  long count = 0;
+
+  if (r == NULL)
+    return 0;
+
+  n = r->GetChildren();
+  while (n != NULL) {
+    if (n->GetName() == _T("Scene"))
+      count++;
+    n = n->GetNext();
+  }
+
+  return count;
+}
+
+wxXmlNode * lxGLCanvas::GetPresentationScene(long index) {
+  wxXmlNode * r = this->frame->m_pres->GetRoot();
+  wxXmlNode * n;
+  long c = 0;
+
+  if (r == NULL)
+    return NULL;
+
+  n = r->GetChildren();
+  while (n != NULL) {
+    if (n->GetName() == _T("Scene")) {
+      if (index == c)
+        return n;
+      c++;
+    }
+    n = n->GetNext();
+  }
+
+  return NULL;
+}
+
+double lxGLCanvas::GetPresentationSceneDuration(wxXmlNode * n) {
+  wxString duration;
+  double seconds;
+
+  if (n != NULL)
+    duration = n->GetAttribute(_T("duration"), wxEmptyString);
+
+  if (duration.empty() || !duration.ToDouble(&seconds) || (seconds <= 0.0))
+    seconds = 3.0;
+
+  return seconds;
+}
+
+bool lxGLCanvas::StartCameraPresentationAnimation() {
+  if (this->GetPresentationSceneCount() < 2)
+    return false;
+
+  this->m_sCameraAutoRotate = false;
+  this->m_sCameraPresentationAnimate = true;
+  this->m_sCameraPresentationCounter = 0;
+  this->m_sCameraPresentationFrom = 0;
+  this->m_sCameraPresentationTo = 1;
+  this->m_sCameraPresentationSWatch.Start();
+  this->m_sCameraPresentationStartTime = 0;
+  this->setup->LoadFromXMLNode(this->GetPresentationScene(this->m_sCameraPresentationFrom));
+  this->ForceRefresh();
+  return true;
+}
+
+void lxGLCanvas::StopCameraPresentationAnimation() {
+  this->m_sCameraPresentationAnimate = false;
+}
+
+bool lxGLCanvas::CameraPresentationAnimate() {
+  long count, now, elapsed, duration;
+  wxXmlNode * from, * to;
+  double t;
+  int guard = 0;
+
+  if (!this->m_sCameraPresentationAnimate)
+    return false;
+
+  count = this->GetPresentationSceneCount();
+  if (count < 2) {
+    this->StopCameraPresentationAnimation();
+    return false;
+  }
+
+  this->m_sCameraPresentationFrom %= count;
+  this->m_sCameraPresentationTo %= count;
+  now = this->m_sCameraPresentationSWatch.Time();
+
+  while (guard < count + 1) {
+    to = this->GetPresentationScene(this->m_sCameraPresentationTo);
+    duration = long(this->GetPresentationSceneDuration(to) * 1000.0);
+    if (duration < 1)
+      duration = 1;
+    elapsed = now - this->m_sCameraPresentationStartTime;
+    if (elapsed < duration)
+      break;
+    this->setup->LoadFromXMLNode(to);
+    this->m_sCameraPresentationFrom = this->m_sCameraPresentationTo;
+    this->m_sCameraPresentationTo = (this->m_sCameraPresentationTo + 1) % count;
+    this->m_sCameraPresentationStartTime += duration;
+    guard++;
+  }
+
+  from = this->GetPresentationScene(this->m_sCameraPresentationFrom);
+  to = this->GetPresentationScene(this->m_sCameraPresentationTo);
+  if ((from == NULL) || (to == NULL)) {
+    this->StopCameraPresentationAnimation();
+    return false;
+  }
+
+  duration = long(this->GetPresentationSceneDuration(to) * 1000.0);
+  if (duration < 1)
+    duration = 1;
+  elapsed = now - this->m_sCameraPresentationStartTime;
+  if (elapsed < 0)
+    elapsed = 0;
+  t = double(elapsed) / double(duration);
+  if (t > 1.0)
+    t = 1.0;
+  t = t * t * (3.0 - 2.0 * t);
+  this->setup->LoadFromXMLNode(from, to, t);
+
+  auto start = this->m_sCameraPresentationSWatch.Time();
+  this->ForceRefresh();
+  auto render_elapsed = this->m_sCameraPresentationSWatch.Time() - start;
+  if (render_elapsed < 10) wxMilliSleep(10 - render_elapsed);
+  this->m_sCameraPresentationCounter++;
+  return true;
+}
+
 
 void lxGLCanvas::OnIdle(wxIdleEvent& event)	{
 
@@ -483,7 +616,7 @@ void lxGLCanvas::OnIdle(wxIdleEvent& event)	{
     case LXGLCML_PANY:
       break;		
     default:
-      if (this->CameraAutoRotate())
+      if (this->CameraAutoRotate() || this->CameraPresentationAnimate())
     	  event.RequestMore();
       break;
   }
@@ -1968,7 +2101,6 @@ bool lxGLCanvas::TRCEndTile()
   else
     return false;
 }
-
 
 
 

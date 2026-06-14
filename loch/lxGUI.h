@@ -60,6 +60,7 @@ enum {
   LXMENU_CAMERA_DEFAULTS,
   LXMENU_CAMERA_PERSP,
   LXMENU_CAMERA_AUTOROTATE,
+  LXMENU_CAMERA_PRESENTATION,
   LXMENU_CAMERA_LOCKROT,
 	LXMENU_VIEW,
   LXMENU_VIEW_FULLSCREEN,
@@ -107,6 +108,7 @@ enum {
 	LXTB_PERSP,
 	LXTB_ROTATION,
 	LXTB_LOCKROT,
+  LXTB_PRESENTATION,
   LXTB_PLAN,
   LXTB_PROFILE,
 	LXTB_FIT,
@@ -201,6 +203,7 @@ class lxFrame: public wxFrame
     void ToggleStereo();
     void ToggleStereoBW();
 		void ToggleRotation();
+    void TogglePresentationAnimation();
 		void ToggleRotLock();
     void ToggleFullScreen();
     void ToggleModelSetup();
@@ -208,6 +211,7 @@ class lxFrame: public wxFrame
     void ToggleSelectionSetup();
     void TogglePresentationDlg();
     void ToggleViewpointSetup();
+    void ResizeCanvas();
 
     void ToggleVisibilityCenterline();
     void ToggleVisibilityCenterlineCave();
@@ -275,5 +279,3 @@ class lxApp: public wxGLApp
 }; // lxApp
 
 #endif
-
-
