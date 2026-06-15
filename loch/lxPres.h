@@ -54,6 +54,8 @@ private:
   wxXmlNode * GetScene(long index);
   wxString GetSceneLabel(wxXmlNode * n, long index);
   wxString GetSceneDuration(wxXmlNode * n);
+  wxString GetSceneRotations(wxXmlNode * n);
+  wxString GetSceneRotationDuration(wxXmlNode * n);
   void EditSelected();
 
   DECLARE_EVENT_TABLE()

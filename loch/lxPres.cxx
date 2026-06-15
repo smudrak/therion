@@ -12,6 +12,7 @@
 #include <wx/ffile.h>
 #include <wx/utils.h>
 #include <cstdint>
+#include <math.h>
 
 #include "lxPres.h"
 #include "lxSetup.h"
@@ -52,6 +53,16 @@ static wxString lxQuoteShellArg(const wxString & value)
   return quoted;
 }
 #endif
+
+static wxString lxFormatTimestamp(double seconds)
+{
+  long total = long(seconds + 0.5);
+  long hours = total / 3600;
+  long minutes = (total / 60) % 60;
+  long secs = total % 60;
+
+  return wxString::Format(_T("%02ld:%02ld:%02ld"), hours, minutes, secs);
+}
 
 
 BEGIN_EVENT_TABLE(lxPresentDlg, wxMiniFrame)
@@ -162,11 +173,23 @@ void lxPresentDlg::UpdateList() {
   if (this->m_mainFrame->m_pres->GetRoot() != NULL) {
     n = this->m_mainFrame->m_pres->GetRoot()->GetChildren();
     long time = 0;
+    double timestamp = 0.0;
+    wxXmlNode * prevScene = NULL;
     while (n != NULL) {
       if (n->GetName() == _T("Scene")) {
+        if (prevScene != NULL) {
+          double duration = 3.0;
+          double rotationDuration = 15.0;
+          long rotations = 0;
+          this->GetSceneDuration(n).ToDouble(&duration);
+          this->GetSceneRotationDuration(prevScene).ToDouble(&rotationDuration);
+          this->GetSceneRotations(prevScene).ToLong(&rotations);
+          timestamp += double(rotations) * rotationDuration + duration;
+        }
         long item = this->m_posLBox->InsertItem(time, this->GetSceneLabel(n, time));
-        this->m_posLBox->SetItem(item, 1, this->GetSceneDuration(n));
+        this->m_posLBox->SetItem(item, 1, lxFormatTimestamp(timestamp));
         time++;
+        prevScene = n;
       }
       n = n->GetNext();
     }
@@ -231,11 +254,38 @@ wxString lxPresentDlg::GetSceneDuration(wxXmlNode * n) {
   return duration;
 }
 
+wxString lxPresentDlg::GetSceneRotations(wxXmlNode * n) {
+  wxString rotations;
+  long value;
+
+  if (n != NULL)
+    rotations = n->GetAttribute(_T("rotations"), wxEmptyString);
+
+  if (rotations.empty() || !rotations.ToLong(&value))
+    rotations = _T("0");
+
+  return rotations;
+}
+
+wxString lxPresentDlg::GetSceneRotationDuration(wxXmlNode * n) {
+  wxString duration;
+  double seconds;
+
+  if (n != NULL)
+    duration = n->GetAttribute(_T("rotation-duration"), wxEmptyString);
+
+  if (duration.empty() || !duration.ToDouble(&seconds) || (seconds <= 0.0))
+    duration = _T("15");
+
+  return duration;
+}
+
 void lxPresentDlg::EditSelected() {
   long sel = this->GetSelection();
   wxXmlNode * n;
-  wxString name, duration;
-  double seconds;
+  wxString name, duration, rotations, rotationDuration;
+  double seconds, rotationSeconds;
+  long rotationCount;
 
   if (sel < 0)
     return;
@@ -249,11 +299,17 @@ void lxPresentDlg::EditSelected() {
   wxFlexGridSizer * fieldSizer = new wxFlexGridSizer(2, 2, lxBORDER, lxBORDER);
   wxTextCtrl * nameTextCtrl = new wxTextCtrl(&dlg, wxID_ANY, this->GetSceneLabel(n, sel));
   wxTextCtrl * durationTextCtrl = new wxTextCtrl(&dlg, wxID_ANY, this->GetSceneDuration(n));
+  wxTextCtrl * rotationsTextCtrl = new wxTextCtrl(&dlg, wxID_ANY, this->GetSceneRotations(n));
+  wxTextCtrl * rotationDurationTextCtrl = new wxTextCtrl(&dlg, wxID_ANY, this->GetSceneRotationDuration(n));
 
   fieldSizer->Add(new wxStaticText(&dlg, wxID_ANY, _("Name")), 0, wxALIGN_CENTER_VERTICAL);
   fieldSizer->Add(nameTextCtrl, 1, wxEXPAND);
-  fieldSizer->Add(new wxStaticText(&dlg, wxID_ANY, _("Duration (s)")), 0, wxALIGN_CENTER_VERTICAL);
+  fieldSizer->Add(new wxStaticText(&dlg, wxID_ANY, _("Transition duration (s)")), 0, wxALIGN_CENTER_VERTICAL);
   fieldSizer->Add(durationTextCtrl, 1, wxEXPAND);
+  fieldSizer->Add(new wxStaticText(&dlg, wxID_ANY, _("Rotations")), 0, wxALIGN_CENTER_VERTICAL);
+  fieldSizer->Add(rotationsTextCtrl, 1, wxEXPAND);
+  fieldSizer->Add(new wxStaticText(&dlg, wxID_ANY, _("Rotation duration (s)")), 0, wxALIGN_CENTER_VERTICAL);
+  fieldSizer->Add(rotationDurationTextCtrl, 1, wxEXPAND);
   fieldSizer->AddGrowableCol(1);
 
   dialogSizer->Add(fieldSizer, 1, wxALL | wxEXPAND, lxBORDER);
@@ -264,14 +320,20 @@ void lxPresentDlg::EditSelected() {
   while (dlg.ShowModal() == wxID_OK) {
     name = nameTextCtrl->GetValue();
     duration = durationTextCtrl->GetValue();
-    if (duration.ToDouble(&seconds) && (seconds > 0.0))
+    rotations = rotationsTextCtrl->GetValue();
+    rotationDuration = rotationDurationTextCtrl->GetValue();
+    if (duration.ToDouble(&seconds) && (seconds > 0.0) &&
+      rotations.ToLong(&rotationCount) &&
+      rotationDuration.ToDouble(&rotationSeconds) && (rotationSeconds > 0.0))
       break;
 
-    wxMessageDialog msg(&dlg, _("Duration must be a positive number of seconds."), _("Warning"), wxOK | wxICON_EXCLAMATION | wxCENTRE);
+    wxMessageDialog msg(&dlg, _("Durations must be positive numbers and rotations must be an integer."), _("Warning"), wxOK | wxICON_EXCLAMATION | wxCENTRE);
     msg.ShowModal();
   }
 
-  if (!duration.ToDouble(&seconds) || (seconds <= 0.0))
+  if (!duration.ToDouble(&seconds) || (seconds <= 0.0) ||
+    !rotations.ToLong(&rotationCount) ||
+    !rotationDuration.ToDouble(&rotationSeconds) || (rotationSeconds <= 0.0))
     return;
 
   n->DeleteAttribute(_T("name"));
@@ -280,6 +342,10 @@ void lxPresentDlg::EditSelected() {
 
   n->DeleteAttribute(_T("duration"));
   n->AddAttribute(_T("duration"), duration);
+  n->DeleteAttribute(_T("rotations"));
+  n->AddAttribute(_T("rotations"), rotations);
+  n->DeleteAttribute(_T("rotation-duration"));
+  n->AddAttribute(_T("rotation-duration"), rotationDuration);
 
   this->UpdateList();
   this->SelectScene(sel);
@@ -347,15 +413,22 @@ void lxPresentDlg::ExportPresentation() {
     totalFrames = 15 * 60;
   } else {
     for (long i = 0; i < count; i++) {
+      wxXmlNode * from = this->GetScene(i);
       wxXmlNode * to = this->GetScene((i + 1) % count);
       double duration = 3.0;
+      double rotationDuration = 15.0;
+      long rotations = 0;
       int transitionFrames;
+      int rotationFrames;
 
+      this->GetSceneRotations(from).ToLong(&rotations);
+      this->GetSceneRotationDuration(from).ToDouble(&rotationDuration);
+      rotationFrames = int(fabs(double(rotations)) * rotationDuration * 60.0 + 0.5);
       this->GetSceneDuration(to).ToDouble(&duration);
       transitionFrames = int(duration * 60.0 + 0.5);
       if (transitionFrames < 1)
         transitionFrames = 1;
-      totalFrames += transitionFrames;
+      totalFrames += rotationFrames + transitionFrames;
     }
   }
 
@@ -409,7 +482,24 @@ void lxPresentDlg::ExportPresentation() {
     wxXmlNode * from = this->GetScene(i);
     wxXmlNode * to = this->GetScene((i + 1) % count);
     double duration = 3.0;
+    double rotationDuration = 15.0;
+    long rotations = 0;
     int transitionFrames;
+    int rotationFrames;
+
+    this->GetSceneRotations(from).ToLong(&rotations);
+    this->GetSceneRotationDuration(from).ToDouble(&rotationDuration);
+    rotationFrames = int(fabs(double(rotations)) * rotationDuration * 60.0 + 0.5);
+    for (int j = 1; keepGoing && (j <= rotationFrames); j++) {
+      double t = double(j) / double(rotationFrames);
+      t = t * t * (3.0 - 2.0 * t);
+      this->m_mainFrame->setup->LoadFromXMLNode(from);
+      this->m_mainFrame->setup->cam_dir += 360.0 * double(rotations) * t;
+      while (this->m_mainFrame->setup->cam_dir >= 360.0)
+        this->m_mainFrame->setup->cam_dir -= 360.0;
+      this->m_mainFrame->setup->UpdatePos();
+      keepGoing = renderFrame();
+    }
 
     this->GetSceneDuration(to).ToDouble(&duration);
     transitionFrames = int(duration * 60.0 + 0.5);
@@ -431,7 +521,7 @@ void lxPresentDlg::ExportPresentation() {
 
   if (exportMp4 && keepGoing) {
 #ifdef LXWIN32
-    scriptPath = targetPath + _T(".bat");
+    scriptPath = wxFileName(folderPath, _T(".animation.bat")).GetFullPath();
     wxString framePattern = wxFileName(folderPath, _T("%06d.png")).GetFullPath();
     wxString script =
       _T("@echo off\r\n")
@@ -449,7 +539,7 @@ void lxPresentDlg::ExportPresentation() {
       dlg.ShowModal();
     }
 #else
-    scriptPath = targetPath + _T(".sh");
+    scriptPath = wxFileName(folderPath, _T(".animation.sh")).GetFullPath();
     wxString framePattern = wxFileName(folderPath, _T("%06d.png")).GetFullPath();
     wxString script =
       _T("#!/bin/sh\n")
@@ -505,6 +595,8 @@ void lxPresentDlg::OnCommand(wxCommandEvent& event)
       p = new wxXmlNode(wxXML_ELEMENT_NODE, _T("Scene"));
       this->m_mainFrame->setup->SaveToXMLNode(p);
       p->AddAttribute(_T("duration"), _T("3"));
+      p->AddAttribute(_T("rotations"), _T("0"));
+      p->AddAttribute(_T("rotation-duration"), _T("15"));
       sel = this->GetSelection();
       if (sel < 0) {
         r->AddChild(p);
@@ -623,7 +715,7 @@ void lxPresentDlg::OnMove(wxMoveEvent& WXUNUSED(event))
 
 
 lxPresentDlg::lxPresentDlg(wxWindow *parent)
-                : wxMiniFrame(parent, wxID_ANY, _("Presentation"),wxDefaultPosition, wxDefaultSize, (wxSYSTEM_MENU | wxCAPTION | wxCLOSE_BOX | wxRESIZE_BORDER) & (~(wxMINIMIZE_BOX | wxMAXIMIZE_BOX)))
+                : wxMiniFrame(parent, wxID_ANY, _("Animation"),wxDefaultPosition, wxDefaultSize, (wxSYSTEM_MENU | wxCAPTION | wxCLOSE_BOX | wxRESIZE_BORDER) & (~(wxMINIMIZE_BOX | wxMAXIMIZE_BOX)))
 {
   this->m_toolBoxPosition.Init(this, parent, 0, 8, 8);
 
@@ -643,7 +735,7 @@ lxPresentDlg::lxPresentDlg(wxWindow *parent)
   lxPanel = new wxPanel(this, wxID_ANY);
   this->m_posLBox = new wxListCtrl(lxPanel, lxPR_LIST, wxDefaultPosition, wxDefaultSize, wxLC_REPORT | wxLC_SINGLE_SEL);
   this->m_posLBox->InsertColumn(0, _("View"));
-  this->m_posLBox->InsertColumn(1, _("Duration (s)"));
+  this->m_posLBox->InsertColumn(1, _("Timestamp"));
   this->m_posLBox->SetColumnWidth(0, 120);
   this->m_posLBox->SetColumnWidth(1, 80);
 

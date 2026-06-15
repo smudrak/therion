@@ -246,7 +246,7 @@ lxFrame::lxFrame(class lxApp * app, const wxString& title, const wxPoint& pos,
 		this->m_toolBar->AddSeparator();		
     this->m_toolBar->AddTool(LXTB_ROTATION, _("Rotation"), wxBitmap(rotation_xpm), _("Rotation"), wxITEM_CHECK);
 		this->m_toolBar->AddTool(LXTB_LOCKROT, _("Lock rotation"), wxBitmap(lockrot_xpm), _("Lock rotation"), wxITEM_CHECK);
-    this->m_toolBar->AddTool(LXTB_PRESENTATION, _("Presentation"), wxBitmap(play_xpm), _("Presentation animation"), wxITEM_CHECK);
+    this->m_toolBar->AddTool(LXTB_PRESENTATION, _("Animation"), wxBitmap(play_xpm), _("Animation"), wxITEM_CHECK);
 		this->m_toolBar->AddTool(LXTB_PERSP, _("Ortho"), wxBitmap(orto_xpm), _("Orthogonal view"), wxITEM_CHECK);
 		this->m_toolBar->AddTool(LXTB_STEREO, _("Stereo"), wxBitmap(stereo_xpm), _("Stereo mode"), wxITEM_CHECK);
 		this->m_toolBar->AddSeparator();		
@@ -318,8 +318,8 @@ lxFrame::lxFrame(class lxApp * app, const wxString& title, const wxPoint& pos,
 
     this->m_toolMenu = new wxMenu;
     this->m_toolMenu->AppendCheckItem(LXMENU_CAMERA_AUTOROTATE, _("Rotation"));
+    this->m_toolMenu->AppendCheckItem(LXMENU_CAMERA_PRESENTATION, _("Animation"));
     this->m_toolMenu->AppendCheckItem(LXMENU_CAMERA_LOCKROT, _("Lock rotation"));
-    this->m_toolMenu->AppendCheckItem(LXMENU_CAMERA_PRESENTATION, _("Presentation animation"));
     this->m_toolMenu->AppendSeparator();
     this->m_toolMenu->AppendCheckItem(LXMENU_VIEW_VIEWPOINTSTP, _("Camera"));
     this->m_toolMenu->AppendCheckItem(LXMENU_VIEW_MODELSTP, _("Scene"));
@@ -327,8 +327,8 @@ lxFrame::lxFrame(class lxApp * app, const wxString& title, const wxPoint& pos,
     wxMenu *viewMenu = new wxMenu;
     viewMenu->Append(LXMENU_CAMERA_ADJUST, _("Action"), cameraAdjustMenu);
     viewMenu->AppendCheckItem(LXMENU_CAMERA_AUTOROTATE, _("Rotation"));
+    viewMenu->AppendCheckItem(LXMENU_CAMERA_PRESENTATION, _("Animation"));
     viewMenu->AppendCheckItem(LXMENU_CAMERA_LOCKROT, _("Lock rotation"));
-    viewMenu->AppendCheckItem(LXMENU_CAMERA_PRESENTATION, _("Presentation animation"));
     viewMenu->Append(LXMENU_CAMERA_ORIENT, _("Orientation"), cameraOrientMenu);
     viewMenu->AppendCheckItem(LXMENU_CAMERA_PERSP, _("Orthogonal"));
     viewMenu->AppendSeparator();
@@ -340,7 +340,7 @@ lxFrame::lxFrame(class lxApp * app, const wxString& title, const wxPoint& pos,
     winMenu->AppendCheckItem(LXMENU_VIEW_MODELSTP, _("&Scene"));
     winMenu->AppendCheckItem(LXMENU_VIEW_SELECTIONSTP, _("&Selection"));
     winMenu->AppendCheckItem(LXMENU_VIEW_SURVEYSTATS, _("&Survey statistics"));
-    winMenu->AppendCheckItem(LXMENU_VIEW_PRESENTDLG, _("&Presentation"));
+    winMenu->AppendCheckItem(LXMENU_VIEW_PRESENTDLG, _("&Animation"));
     winMenu->AppendSeparator();
     winMenu->Append(LXMENU_TOOLS_OPTIONS, _("&Options..."));
 

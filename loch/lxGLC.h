@@ -128,6 +128,8 @@ class lxGLCanvas: public wxGLCanvas {
     long GetPresentationSceneCount();
     wxXmlNode * GetPresentationScene(long index);
     double GetPresentationSceneDuration(wxXmlNode * n);
+    long GetPresentationSceneRotations(wxXmlNode * n);
+    double GetPresentationSceneRotationDuration(wxXmlNode * n);
      
     void InitializeS();
     void ForceRefresh(bool updateTB = true);
