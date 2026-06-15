@@ -29,6 +29,16 @@ enum {
   lxPR_EXPORT,
 };
 
+#ifdef LXWIN32
+static wxString lxQuoteBatArg(const wxString & value)
+{
+  wxString quoted = _T("\"");
+  quoted += value;
+  quoted.Replace(_T("%"), _T("%%"));
+  quoted += _T("\"");
+  return quoted;
+}
+#else
 static wxString lxQuoteShellArg(const wxString & value)
 {
   wxString quoted = _T("'");
@@ -39,16 +49,6 @@ static wxString lxQuoteShellArg(const wxString & value)
       quoted += value[i];
   }
   quoted += _T("'");
-  return quoted;
-}
-
-#ifdef LXWIN32
-static wxString lxQuoteBatArg(const wxString & value)
-{
-  wxString quoted = _T("\"");
-  quoted += value;
-  quoted.Replace(_T("%"), _T("%%"));
-  quoted += _T("\"");
   return quoted;
 }
 #endif
