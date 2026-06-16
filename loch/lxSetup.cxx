@@ -339,6 +339,126 @@ void lxSetup::SaveToXMLNode(wxXmlNode * n)
   setlocale(LC_NUMERIC,prevlocale);
 }
 
+static void setXmlAttr(wxXmlNode * n, const wxString & name, const wxString & value)
+{
+  n->DeleteAttribute(name);
+  n->AddAttribute(name, value);
+}
+
+static void setXmlBoolAttr(wxXmlNode * n, const wxString & name, bool value)
+{
+  setXmlAttr(n, name, value ? _T("true") : _T("false"));
+}
+
+static void loadXmlBoolAttr(wxXmlNode * n, const wxString & name, bool * value)
+{
+  wxString attr = n->GetAttribute(name, wxEmptyString);
+
+  if (attr.empty())
+    return;
+
+  *value = (attr == _T("true")) || (attr == _T("1"));
+}
+
+static void loadXmlDoubleAttr(wxXmlNode * n, const wxString & name, double * value)
+{
+  wxString attr = n->GetAttribute(name, wxEmptyString);
+
+  if (attr.empty())
+    return;
+
+  *value = atof(attr.mbc_str());
+}
+
+static void loadXmlLongAttr(wxXmlNode * n, const wxString & name, int * value)
+{
+  wxString attr = n->GetAttribute(name, wxEmptyString);
+  long parsed;
+
+  if (attr.empty() || !attr.ToLong(&parsed))
+    return;
+
+  *value = int(parsed);
+}
+
+void lxSetup::SaveSceneToXMLNode(wxXmlNode * n)
+{
+  if ((n == NULL) || (n->GetName() != _T("Scene")))
+    return;
+
+  char * prevlocale = setlocale(LC_NUMERIC,NULL);
+  setlocale(LC_NUMERIC,"C");
+
+  setXmlBoolAttr(n, _T("scene-vis-centerline"), this->m_vis_centerline);
+  setXmlBoolAttr(n, _T("scene-vis-walls"), this->m_vis_walls);
+  setXmlBoolAttr(n, _T("scene-vis-surface"), this->m_vis_surface);
+  setXmlBoolAttr(n, _T("scene-vis-labels"), this->m_vis_labels);
+  setXmlBoolAttr(n, _T("scene-vis-bbox"), this->m_vis_bbox);
+  setXmlBoolAttr(n, _T("scene-vis-grid"), this->m_vis_grid);
+  setXmlBoolAttr(n, _T("scene-vis-indicators"), this->m_vis_indicators);
+  setXmlBoolAttr(n, _T("scene-vis-centerline-cave"), this->m_vis_centerline_cave);
+  setXmlBoolAttr(n, _T("scene-vis-centerline-surface"), this->m_vis_centerline_surface);
+  setXmlBoolAttr(n, _T("scene-vis-centerline-splay"), this->m_vis_centerline_splay);
+  setXmlBoolAttr(n, _T("scene-vis-centerline-station"), this->m_vis_centerline_station);
+  setXmlBoolAttr(n, _T("scene-vis-centerline-entrance"), this->m_vis_centerline_entrance);
+  setXmlBoolAttr(n, _T("scene-vis-centerline-fix"), this->m_vis_centerline_fix);
+  setXmlBoolAttr(n, _T("scene-vis-centerline-duplicate"), this->m_vis_centerline_duplicate);
+  setXmlBoolAttr(n, _T("scene-label-comment"), this->m_stlabel_comment);
+  setXmlBoolAttr(n, _T("scene-label-name"), this->m_stlabel_name);
+  setXmlBoolAttr(n, _T("scene-label-altitude"), this->m_stlabel_altitude);
+  setXmlBoolAttr(n, _T("scene-label-survey"), this->m_stlabel_survey);
+  setXmlBoolAttr(n, _T("scene-surface-transparency"), this->m_srf_transparency);
+  setXmlBoolAttr(n, _T("scene-surface-texture"), this->m_srf_texture);
+  setXmlBoolAttr(n, _T("scene-surface-lighting"), this->m_srf_lighting);
+  setXmlBoolAttr(n, _T("scene-walls-transparency"), this->m_walls_transparency);
+  setXmlBoolAttr(n, _T("scene-color-apply-centerline"), this->m_colormd_app_centerline);
+  setXmlBoolAttr(n, _T("scene-color-apply-walls"), this->m_colormd_app_walls);
+  setXmlAttr(n, _T("scene-color-mode"), wxString::Format(_T("%d"), this->m_colormd));
+  setXmlAttr(n, _T("scene-surface-opacity"), wxString::Format(_T("%.4f"), this->m_srf_opacity));
+  setXmlAttr(n, _T("scene-walls-opacity"), wxString::Format(_T("%.4f"), this->m_walls_opacity));
+
+  setlocale(LC_NUMERIC,prevlocale);
+}
+
+void lxSetup::LoadSceneFromXMLNode(wxXmlNode * n)
+{
+  if ((n == NULL) || (n->GetName() != _T("Scene")))
+    return;
+
+  char * prevlocale = setlocale(LC_NUMERIC,NULL);
+  setlocale(LC_NUMERIC,"C");
+
+  loadXmlBoolAttr(n, _T("scene-vis-centerline"), &this->m_vis_centerline);
+  loadXmlBoolAttr(n, _T("scene-vis-walls"), &this->m_vis_walls);
+  loadXmlBoolAttr(n, _T("scene-vis-surface"), &this->m_vis_surface);
+  loadXmlBoolAttr(n, _T("scene-vis-labels"), &this->m_vis_labels);
+  loadXmlBoolAttr(n, _T("scene-vis-bbox"), &this->m_vis_bbox);
+  loadXmlBoolAttr(n, _T("scene-vis-grid"), &this->m_vis_grid);
+  loadXmlBoolAttr(n, _T("scene-vis-indicators"), &this->m_vis_indicators);
+  loadXmlBoolAttr(n, _T("scene-vis-centerline-cave"), &this->m_vis_centerline_cave);
+  loadXmlBoolAttr(n, _T("scene-vis-centerline-surface"), &this->m_vis_centerline_surface);
+  loadXmlBoolAttr(n, _T("scene-vis-centerline-splay"), &this->m_vis_centerline_splay);
+  loadXmlBoolAttr(n, _T("scene-vis-centerline-station"), &this->m_vis_centerline_station);
+  loadXmlBoolAttr(n, _T("scene-vis-centerline-entrance"), &this->m_vis_centerline_entrance);
+  loadXmlBoolAttr(n, _T("scene-vis-centerline-fix"), &this->m_vis_centerline_fix);
+  loadXmlBoolAttr(n, _T("scene-vis-centerline-duplicate"), &this->m_vis_centerline_duplicate);
+  loadXmlBoolAttr(n, _T("scene-label-comment"), &this->m_stlabel_comment);
+  loadXmlBoolAttr(n, _T("scene-label-name"), &this->m_stlabel_name);
+  loadXmlBoolAttr(n, _T("scene-label-altitude"), &this->m_stlabel_altitude);
+  loadXmlBoolAttr(n, _T("scene-label-survey"), &this->m_stlabel_survey);
+  loadXmlBoolAttr(n, _T("scene-surface-transparency"), &this->m_srf_transparency);
+  loadXmlBoolAttr(n, _T("scene-surface-texture"), &this->m_srf_texture);
+  loadXmlBoolAttr(n, _T("scene-surface-lighting"), &this->m_srf_lighting);
+  loadXmlBoolAttr(n, _T("scene-walls-transparency"), &this->m_walls_transparency);
+  loadXmlBoolAttr(n, _T("scene-color-apply-centerline"), &this->m_colormd_app_centerline);
+  loadXmlBoolAttr(n, _T("scene-color-apply-walls"), &this->m_colormd_app_walls);
+  loadXmlLongAttr(n, _T("scene-color-mode"), &this->m_colormd);
+  loadXmlDoubleAttr(n, _T("scene-surface-opacity"), &this->m_srf_opacity);
+  loadXmlDoubleAttr(n, _T("scene-walls-opacity"), &this->m_walls_opacity);
+
+  setlocale(LC_NUMERIC,prevlocale);
+}
+
 wxString getXmlValue(wxXmlNode * n, const wxString & name)
 {
   wxString rv;

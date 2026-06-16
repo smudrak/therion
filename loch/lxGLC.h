@@ -106,6 +106,7 @@ class lxGLCanvas: public wxGLCanvas {
     long m_sCameraPresentationFrom = 0;
     long m_sCameraPresentationTo = 1;
     long m_sCameraPresentationStartTime = 0;
+    long m_sCameraPresentationAppliedScene = -1;
     double m_sCameraPresentationStartDir = 0.0;
 
     void OnPaint(wxPaintEvent& event);
@@ -127,6 +128,10 @@ class lxGLCanvas: public wxGLCanvas {
     bool CameraPresentationRotate();
     long GetPresentationSceneCount();
     wxXmlNode * GetPresentationScene(long index);
+    bool GetPresentationLoopAnimation();
+    bool GetPresentationSceneChanges();
+    void ApplyPresentationScene(long index);
+    void SelectPresentationScene(long index);
     double GetPresentationSceneDuration(wxXmlNode * n);
     long GetPresentationSceneRotations(wxXmlNode * n);
     double GetPresentationSceneRotationDuration(wxXmlNode * n);

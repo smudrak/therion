@@ -56,6 +56,7 @@
 #include "icons/orto.xpm"
 #include "icons/camera.xpm"
 #include "icons/scene.xpm"
+#include "icons/clapperboard.xpm"
 #include "icons/viscline.xpm"
 #include "icons/vissurface.xpm"
 #include "icons/visbbox.xpm"
@@ -114,7 +115,10 @@ BEGIN_EVENT_TABLE(lxFrame, wxFrame)
     EVT_MENU(LXMENU_CAMERA_PERSP, lxFrame::OnAll)
     EVT_MENU(LXMENU_CAMERA_AUTOROTATE, lxFrame::OnAll)
     EVT_MENU(LXMENU_CAMERA_PRESENTATION, lxFrame::OnAll)
+    EVT_MENU(LXMENU_CAMERA_PRESENTATION_EXPORT, lxFrame::OnAll)
+    EVT_MENU(LXMENU_CAMERA_PRESENTATION_OPTIONS, lxFrame::OnAll)
     EVT_MENU(LXMENU_CAMERA_LOCKROT, lxFrame::OnAll)
+    EVT_MENU(LXMENU_PRESMARK, lxFrame::OnAll)
     EVT_MENU(LXMENU_CAMERA_ORIENT_HOME, lxFrame::OnMenuCameraOrient)
     EVT_MENU(LXMENU_CAMERA_ORIENT_PLAN, lxFrame::OnMenuCameraOrient)
     EVT_MENU(LXMENU_CAMERA_ORIENT_PROFILE, lxFrame::OnMenuCameraOrient)
@@ -246,7 +250,7 @@ lxFrame::lxFrame(class lxApp * app, const wxString& title, const wxPoint& pos,
 		this->m_toolBar->AddSeparator();		
     this->m_toolBar->AddTool(LXTB_ROTATION, _("Rotation"), wxBitmap(rotation_xpm), _("Rotation"), wxITEM_CHECK);
 		this->m_toolBar->AddTool(LXTB_LOCKROT, _("Lock rotation"), wxBitmap(lockrot_xpm), _("Lock rotation"), wxITEM_CHECK);
-    this->m_toolBar->AddTool(LXTB_PRESENTATION, _("Animation"), wxBitmap(play_xpm), _("Animation"), wxITEM_CHECK);
+    this->m_toolBar->AddTool(LXTB_PRESENTATION, _("Play animation"), wxBitmap(play_xpm), _("Play animation"), wxITEM_CHECK);
 		this->m_toolBar->AddTool(LXTB_PERSP, _("Ortho"), wxBitmap(orto_xpm), _("Orthogonal view"), wxITEM_CHECK);
 		this->m_toolBar->AddTool(LXTB_STEREO, _("Stereo"), wxBitmap(stereo_xpm), _("Stereo mode"), wxITEM_CHECK);
 		this->m_toolBar->AddSeparator();		
@@ -268,6 +272,7 @@ lxFrame::lxFrame(class lxApp * app, const wxString& title, const wxPoint& pos,
 		this->m_toolBar->AddSeparator();		
 		this->m_toolBar->AddTool(LXTB_VIEWSTP, _("Camera setup"), wxBitmap(camera_xpm), _("Camera setup"), wxITEM_CHECK);
 		this->m_toolBar->AddTool(LXTB_SCENESTP, _("Scene setup"), wxBitmap(scene_xpm), _("Scene setup"), wxITEM_CHECK);
+    this->m_toolBar->AddTool(LXTB_PRESENTDLG, _("Animation"), wxBitmap(clapperboard_xpm), _("Animation"), wxITEM_CHECK);
 		this->m_toolBar->AddSeparator();		
 		this->m_toolBar->AddTool(LXTB_FULLSCREEN, _("Full screen"), wxBitmap(fullscreen_xpm), _("Full screen"), wxITEM_CHECK);
 		this->m_toolBar->Realize();
@@ -318,11 +323,14 @@ lxFrame::lxFrame(class lxApp * app, const wxString& title, const wxPoint& pos,
 
     this->m_toolMenu = new wxMenu;
     this->m_toolMenu->AppendCheckItem(LXMENU_CAMERA_AUTOROTATE, _("Rotation"));
-    this->m_toolMenu->AppendCheckItem(LXMENU_CAMERA_PRESENTATION, _("Animation"));
     this->m_toolMenu->AppendCheckItem(LXMENU_CAMERA_LOCKROT, _("Lock rotation"));
+    this->m_toolMenu->AppendSeparator();
+    this->m_toolMenu->AppendCheckItem(LXMENU_CAMERA_PRESENTATION, _("Play animation"));
+    this->m_toolMenu->Append(LXMENU_PRESMARK, _("Mark view"));
     this->m_toolMenu->AppendSeparator();
     this->m_toolMenu->AppendCheckItem(LXMENU_VIEW_VIEWPOINTSTP, _("Camera"));
     this->m_toolMenu->AppendCheckItem(LXMENU_VIEW_MODELSTP, _("Scene"));
+    this->m_toolMenu->AppendCheckItem(LXMENU_VIEW_PRESENTDLG, _("Animation"));
     
     wxMenu *viewMenu = new wxMenu;
     viewMenu->Append(LXMENU_CAMERA_ADJUST, _("Action"), cameraAdjustMenu);
@@ -340,7 +348,10 @@ lxFrame::lxFrame(class lxApp * app, const wxString& title, const wxPoint& pos,
     winMenu->AppendCheckItem(LXMENU_VIEW_MODELSTP, _("&Scene"));
     winMenu->AppendCheckItem(LXMENU_VIEW_SELECTIONSTP, _("&Selection"));
     winMenu->AppendCheckItem(LXMENU_VIEW_SURVEYSTATS, _("&Survey statistics"));
+    winMenu->AppendSeparator();
     winMenu->AppendCheckItem(LXMENU_VIEW_PRESENTDLG, _("&Animation"));
+    winMenu->Append(LXMENU_CAMERA_PRESENTATION_EXPORT, _("Animation export..."));
+    winMenu->Append(LXMENU_CAMERA_PRESENTATION_OPTIONS, _("Animation options..."));
     winMenu->AppendSeparator();
     winMenu->Append(LXMENU_TOOLS_OPTIONS, _("&Options..."));
 
@@ -608,6 +619,18 @@ void lxFrame::OnAll(wxCommandEvent& event)
       this->TogglePresentationAnimation();
       break;
 
+    case LXMENU_CAMERA_PRESENTATION_EXPORT:
+      this->m_presentationDlg->ExportPresentation();
+      break;
+
+    case LXMENU_CAMERA_PRESENTATION_OPTIONS:
+      this->m_presentationDlg->EditOptions();
+      break;
+
+    case LXMENU_PRESMARK:
+      this->m_presentationDlg->MarkCurrentView();
+      break;
+
 		case LXTB_FULLSCREEN:
     case LXMENU_VIEW_FULLSCREEN:
       this->ToggleFullScreen();
@@ -623,6 +646,10 @@ void lxFrame::OnAll(wxCommandEvent& event)
 		
 		case LXTB_SCENESTP:
       this->ToggleModelSetup();
+      break;
+
+    case LXTB_PRESENTDLG:
+      this->TogglePresentationDlg();
       break;
 
     case LXMENU_TOOLS_OPTIONS:
@@ -921,8 +948,12 @@ void lxFrame::UpdateM2TB() {
   // dialogs
   this->m_toolBar->ToggleTool(LXTB_VIEWSTP, this->m_viewpointSetupDlgOn); 
   this->m_toolMenu->Check(LXMENU_VIEW_VIEWPOINTSTP, this->m_viewpointSetupDlgOn); 
-  this->m_toolBar->ToggleTool(LXTB_SCENESTP, this->m_modelSetupDlgOn); 
+	this->m_toolBar->ToggleTool(LXTB_SCENESTP, this->m_modelSetupDlgOn); 
   this->m_toolMenu->Check(LXMENU_VIEW_MODELSTP, this->m_modelSetupDlgOn); 
+  this->m_toolBar->ToggleTool(LXTB_PRESENTDLG, this->m_presentationDlgOn);
+  this->m_toolMenu->Check(LXMENU_VIEW_PRESENTDLG, this->m_presentationDlgOn);
+  if (this->m_presentationDlg != NULL)
+    this->m_presentationDlg->UpdateControls();
   // TODO: Tree button
   // this->m_toolMenu->Check(LXMENU_VIEW_SELECTIONSTP, this->m_selectionSetupDlgOn); 
 

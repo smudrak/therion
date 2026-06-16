@@ -33,6 +33,7 @@ public:
   bool m_changed = {};
   class lxFrame * m_mainFrame;
   class wxListCtrl * m_posLBox;
+  class wxButton * m_playButton = NULL;
 
   lxPresentDlg(wxWindow *parent);
 
@@ -46,16 +47,23 @@ public:
   void LoadPresentation();
   void UpdateList();
   void UpdateControls();
+  void MarkCurrentView();
+  void SelectScene(long index);
   void ExportPresentation();
+  void EditOptions();
 
 private:
   long GetSelection();
-  void SelectScene(long index);
   wxXmlNode * GetScene(long index);
   wxString GetSceneLabel(wxXmlNode * n, long index);
   wxString GetSceneDuration(wxXmlNode * n);
   wxString GetSceneRotations(wxXmlNode * n);
   wxString GetSceneRotationDuration(wxXmlNode * n);
+  bool GetLoopAnimation();
+  bool GetSceneChanges();
+  void SetLoopAnimation(bool value);
+  void SetSceneChanges(bool value);
+  void ApplySceneChanges(wxXmlNode * n);
   void EditSelected();
 
   DECLARE_EVENT_TABLE()
