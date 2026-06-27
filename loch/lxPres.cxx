@@ -935,7 +935,7 @@ lxPresentDlg::lxPresentDlg(wxWindow *parent)
   lxPanel = new wxPanel(this, wxID_ANY);
   this->m_posLBox = new wxListCtrl(lxPanel, lxPR_LIST, wxDefaultPosition, wxDefaultSize, wxLC_REPORT | wxLC_SINGLE_SEL);
   this->m_posLBox->InsertColumn(0, _("View"));
-  this->m_posLBox->InsertColumn(1, _("Timestamp"));
+  this->m_posLBox->InsertColumn(1, _("Time"));
   this->m_posLBox->SetColumnWidth(0, 120);
   this->m_posLBox->SetColumnWidth(1, 80);
 
